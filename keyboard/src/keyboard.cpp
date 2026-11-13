@@ -198,7 +198,7 @@ class KeyboardNode : public rclcpp::Node {
 
           // Function keys (arrows, shift, crtlr, locks)
           } else {
-            key_b = 128;
+            key_b = 164;
             key_r = (255 * (k.code - SDLK_z)) / (SDLK_LAST - SDLK_z);
           }
 
