@@ -24,13 +24,16 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 find_package(std_msgs REQUIRED)
 find_package(keyboard_msgs REQUIRED)
 
+# These shoud all resolve to an SDL 1.2 legacy library
 find_package(SDL REQUIRED)
-#find_package(SDL2 REQUIRED)
 find_package(SDL_ttf REQUIRED)
+find_package(SDL_image REQUIRED)
+find_package(SDL_gfx REQUIRED)
 
 add_executable(keyboard src/keyboard.cpp)
 ament_target_dependencies(keyboard rclcpp std_msgs keyboard_msgs)
@@ -45,8 +48,12 @@ target_include_directories(keyboard
 )
 
 target_link_libraries(keyboard
+  rclcpp::rclcpp
+  ament_index_cpp::ament_index_cpp
   SDL
+  SDL_gfx
   ${SDL_TTF_LIBRARIES}
+  ${SDL_IMAGE_LIBRARIES}
 )
 
 
