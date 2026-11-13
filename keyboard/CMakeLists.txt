@@ -8,7 +8,8 @@ endif()
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  #set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 20)
 endif()
 
 # Default to release build
@@ -23,22 +24,29 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+
 find_package(std_msgs REQUIRED)
-find_package(SDL REQUIRED)
 find_package(keyboard_msgs REQUIRED)
+
+find_package(SDL REQUIRED)
+#find_package(SDL2 REQUIRED)
+find_package(SDL_ttf REQUIRED)
 
 add_executable(keyboard src/keyboard.cpp)
 ament_target_dependencies(keyboard rclcpp std_msgs keyboard_msgs)
+
 target_include_directories(keyboard
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
   PRIVATE
     ${SDL_INCLUDE_DIR}
+    ${SDL_TTF_INCLUDE_DIRS}
 )
 
 target_link_libraries(keyboard
   SDL
+  ${SDL_TTF_LIBRARIES}
 )
 
 
