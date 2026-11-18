@@ -10,6 +10,9 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 
 #include <keyboard_msgs/msg/key.hpp>
+#include "std_msgs/msg/string.hpp"
+
+#include <yaml-cpp/yaml.h>
 
 #include "SDL/SDL.h"
 #include "SDL/SDL_ttf.h"
@@ -17,6 +20,7 @@
 #include "SDL/SDL_rotozoom.h"
 
 using namespace std::chrono_literals;
+using std::placeholders::_1;
 
 SDL_Surface* load_scale_png(const std::string& filename, int targetWidth, int targetHeight) {
   SDL_Surface* loadedImage = nullptr;
@@ -62,9 +66,13 @@ class KeyboardNode : public rclcpp::Node {
 
       /* == Initialize ROS interfaces == */
 
+      timer = this->create_wall_timer(20ms, std::bind(&KeyboardNode::timer_callback, this));
+
       pub_down = this->create_publisher<keyboard_msgs::msg::Key>("keydown", 10);
       pub_up = this->create_publisher<keyboard_msgs::msg::Key>("keyup", 10);
-      timer = this->create_wall_timer(20ms, std::bind(&KeyboardNode::timer_callback, this));
+
+      sub_fsm_state = this->create_subscription<std_msgs::msg::String>(
+        "/debug/test_fsm_states", 10, std::bind(&KeyboardNode::fsm_state_callback, this, _1));
 
       /* == Declare and load ROS Parameters == */
 
@@ -129,9 +137,48 @@ class KeyboardNode : public rclcpp::Node {
       keyup_txt = "---";
       keydown_txt = "---";
       mapped_color = 0;
+
+      move_state = "not set";
+      meas_state = "not set";
+      preplan_idx = -1;
+      num_preplan_poses = -1;
     }
 
   private:
+    
+    void fsm_state_callback(const std_msgs::msg::String &msg) {
+      //RCLCPP_INFO(this->get_logger(), "Received: '%s'", msg.data.c_str());
+
+      try {
+        // Parse the raw string into a YAML::Node
+        YAML::Node fsm_states = YAML::Load(msg.data);
+
+        if (fsm_states["end_state"]) {
+          if (fsm_states["end_state"]["move_state"]) {
+            move_state = fsm_states["end_state"]["move_state"].as<std::string>();
+            //RCLCPP_INFO(this->get_logger(), "move_state: %s", move_state.c_str());
+          }
+  
+          if (fsm_states["end_state"]["measure_state"]) {
+            meas_state = fsm_states["end_state"]["measure_state"].as<std::string>();
+            //RCLCPP_INFO(this->get_logger(), "meas_state: %s", meas_state.c_str());
+          }
+  
+          if (fsm_states["end_state"]["preplan_idx"]) {
+            preplan_idx = fsm_states["end_state"]["preplan_idx"].as<int>();
+            //RCLCPP_INFO(this->get_logger(), "preplan_idx: %d", preplan_idx);
+          }
+  
+          if (fsm_states["end_state"]["num_preplan_poses"]) {
+            num_preplan_poses = fsm_states["end_state"]["num_preplan_poses"].as<int>();
+            //RCLCPP_INFO(this->get_logger(), "num_preplan_poses: %d", num_preplan_poses);
+          }
+        }
+      } catch (const YAML::Exception & e) {
+        RCLCPP_ERROR(this->get_logger(), "FSM state callback YAML parsing error: %s", e.what());
+      }
+    }
+
     void timer_callback() {
 
       keyboard_msgs::msg::Key k;
@@ -146,21 +193,18 @@ class KeyboardNode : public rclcpp::Node {
         switch(event.type) {
           
           case SDL_KEYDOWN:
-
             pressed = true;
+
             [[fallthrough]]; // Suppresses the warning for falling into SDL_KEYUP case
 
           case SDL_KEYUP: {
-            
             new_event = true;
-
             k.code = event.key.keysym.sym;
             k.modifiers = event.key.keysym.mod;
             
             break;
 
           } case SDL_QUIT: {
-
             shutdown = true;
 
             SDL_FreeSurface(logo);
@@ -235,10 +279,27 @@ class KeyboardNode : public rclcpp::Node {
             pub_up->publish(k);
         }
 
+        int pose_x = 50, move_x = 200, meas_x = 370;
         text_to_surface("====  Current Test State ====", 30, 200);
-        text_to_surface(fontSmall, "  |  PoseIdx  |  MoveState  |  MeasState  | ", -1, -1);
-        text_to_surface(fontSmall, "  |     0     |    READY    |    IDLE     | ", -1, -1);
-        text_to_surface(fontSmall," ", -1, -1);
+        
+        int label_text_y = textLocation.y;
+
+        text_to_surface(fontSmall, "| PoseIdx", pose_x, label_text_y);
+        text_to_surface(fontSmall, "| MoveState", move_x, label_text_y);
+        text_to_surface(fontSmall, "| MeasState", meas_x, label_text_y);
+
+        int state_text_y = textLocation.y;
+
+        formatted = std::format("| {} / {} ", preplan_idx, num_preplan_poses);
+        text_to_surface(fontSmall, formatted, pose_x, state_text_y);
+
+        formatted = std::format("| {} ", move_state);
+        text_to_surface(fontSmall, formatted, move_x, state_text_y);
+        
+        formatted = std::format("| {} ", meas_state);
+        text_to_surface(fontSmall, formatted, meas_x, state_text_y);
+        
+        text_to_surface(fontSmall," ", 30, -1);
 
         text_to_surface("=====  Last Key Event =====", 30, -1);
 
@@ -282,12 +343,21 @@ class KeyboardNode : public rclcpp::Node {
     rclcpp::Publisher<keyboard_msgs::msg::Key>::SharedPtr pub_down;
     rclcpp::Publisher<keyboard_msgs::msg::Key>::SharedPtr pub_up;
 
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_fsm_state;
+
     SDL_Surface* window, *logo;
     TTF_Font* font, *fontSmall;
-    std::string test_plan_name, preplan_traj_name, formatted, keyup_txt, keydown_txt;
-    std::vector<std::string> help_strs;
+
     SDL_Rect keyColorBoxLocation, textLocation;
     Uint32 mapped_color;
+
+    std::string test_plan_name, preplan_traj_name;
+    std::string formatted, keyup_txt, keydown_txt;
+    std::string move_state, meas_state;
+    
+    std::vector<std::string> help_strs;
+    
+    int preplan_idx, num_preplan_poses;
   };
   
 void KeyboardNode::text_to_surface(const std::string& text, Sint16 x, Sint16 y) {

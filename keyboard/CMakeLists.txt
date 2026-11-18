@@ -35,6 +35,8 @@ find_package(SDL_ttf REQUIRED)
 find_package(SDL_image REQUIRED)
 find_package(SDL_gfx REQUIRED)
 
+find_package(yaml-cpp REQUIRED)
+
 add_executable(keyboard src/keyboard.cpp)
 ament_target_dependencies(keyboard rclcpp std_msgs keyboard_msgs)
 
@@ -54,6 +56,7 @@ target_link_libraries(keyboard
   SDL_gfx
   ${SDL_TTF_LIBRARIES}
   ${SDL_IMAGE_LIBRARIES}
+  yaml-cpp
 )
 
 
